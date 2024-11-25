@@ -122,8 +122,8 @@ temperature["season"] = pd.Categorical(temperature["season"], categories=seasons
 avg_irradiance = compute_seasonal_time_averages(irradiance)
 avg_temperature = compute_seasonal_time_averages(temperature)
 
-avg_irradiance.to_csv("irradiance_seasons.csv")
-avg_temperature.to_csv("temperature_seasons.csv")
+# avg_irradiance.to_csv("irradiance_seasons.csv")
+# avg_temperature.to_csv("temperature_seasons.csv")
 
 total_year_irradiance_avg = compute_total_year_time_averages(irradiance)
 total_year_temperature_avg = compute_total_year_time_averages(temperature)
