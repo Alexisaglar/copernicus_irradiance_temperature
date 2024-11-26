@@ -3,7 +3,7 @@ import pandas as pd
 import datetime
 
 kelvin_temperature = 273.15
-date_period = '2020-01-01/2023-01-31'
+date_period = '2020-01-01/2023-12-31'
 
 #Clean temperature data ready to process 
 # Load xarray dataset from a file

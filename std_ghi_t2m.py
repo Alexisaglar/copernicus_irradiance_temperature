@@ -7,80 +7,16 @@ from matplotlib.cm import get_cmap
 temperature_file = "processed_data/temperature.csv"
 irradiance_file = "processed_data/irradiance.csv"
 
-def plot_seasonal_profiles(avg_irradiance, avg_temperature, seasons):
-    fig, axs = plt.subplots(len(seasons), 1, figsize=(12, 12), sharex=True)
-    cmap = get_cmap("tab10")  # Use a colormap for unique colors
-
-    for i, season in enumerate(seasons):
-        season_data_irr = avg_irradiance.loc[avg_irradiance.index.get_level_values("season") == season]
-        season_data_temp = avg_temperature.loc[avg_temperature.index.get_level_values("season") == season]
-
-        temp_min = season_data_temp["t2m"].min() - 2
-        temp_max = season_data_temp["t2m"].max() + 2
-        norm_factor = season_data_irr["GHI"].max()  
-
-        ax2 = axs[i].twinx()  # Create twin axis for temperature
-        lines = []  # Collect line objects for legend
-        labels = []  # Collect labels for legend
-
-        for j, year in enumerate(season_data_irr.index.get_level_values("year").unique()):
-            year_irradiance = season_data_irr.loc[season_data_irr.index.get_level_values("year") == year]
-            year_temperature = season_data_temp.loc[season_data_temp.index.get_level_values("year") == year]
-
-            color = cmap(j)
-
-            # Plot irradiance
-            line1, = axs[i].plot(
-                pd.to_datetime(year_irradiance.index.get_level_values("time")),
-                year_irradiance["GHI"],
-                label=f"GHI ({year})",
-                color=color,
-                linewidth=2,
-            )
-            lines.append(line1)
-            labels.append(f"GHI ({year})")
-
-            normalized_temp = (year_temperature["t2m"] - temp_min) / (temp_max - temp_min) * norm_factor
-
-            # Plot normalized temperature
-            line2, = ax2.plot(
-                pd.to_datetime(year_temperature.index.get_level_values("time")),
-                normalized_temp,
-                label=f"Temperature ({year})",
-                color=color,
-                linewidth=2,
-                linestyle="--",
-            )
-            lines.append(line2)
-            labels.append(f"Temperature ({year})")
-
-            ax2.set_ylim(0, norm_factor)
-            temp_ticks = np.linspace(temp_min, temp_max, 5)
-            normalized_ticks = (temp_ticks - temp_min) / (temp_max - temp_min) * norm_factor
-            ax2.set_yticks(normalized_ticks)
-            ax2.set_yticklabels([f"{tick:.1f}" for tick in temp_ticks])
-
-        axs[i].set_title(f"{season.capitalize()} Average Profile")
-        axs[i].set_ylabel("Irradiance (W/m²)")
-        ax2.set_ylabel("Temperature (°C)", color="black")
-
-        # Add a combined legend for both axes
-        axs[i].legend(lines, labels, loc="upper left", fontsize=8)
-
-    axs[-1].set_xlabel("Time of Day")
-    axs[-1].xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
-
-    plt.tight_layout()
-    plt.show()
-
 def get_csv_data(temperature_file, irradiance_file):
     irradiance = pd.read_csv(irradiance_file)
     irradiance["index_date"] = pd.to_datetime(irradiance["index_date"], errors='coerce')
     irradiance.set_index(irradiance["index_date"], inplace=True)
+    irradiance.drop(columns=["index_date"], inplace=True)
 
     temperature = pd.read_csv(temperature_file)
     temperature["valid_time"] = pd.to_datetime(temperature["valid_time"], errors='coerce')
     temperature.set_index(temperature["valid_time"], inplace=True)
+    temperature.drop(columns=["valid_time"], inplace=True)
 
     return irradiance, temperature
 
@@ -96,45 +32,141 @@ def assign_season(month):
     else:
         return None  # Handle edge cases gracefully
 
-def compute_total_year_time_averages(df):
-    return df.groupby(["season", "time"]).mean()
+def compute_seasonal_time_stats(df):
+    df = df.reset_index()
+    print(df)
+    grouped = df.groupby(["season", "time"])
+    mean_df = grouped.mean()
+    std_df = grouped.std()
+    return mean_df, std_df
 
 def compute_seasonal_time_averages(df):
     df["year"] = df.index.year  # Extract year
+    df = df.reset_index()
     return df.groupby(["year", "season", "time"]).mean()
 
-irradiance, temperature = get_csv_data(temperature_file, irradiance_file)
+def plot_combined_seasonal_profiles(avg_irradiance, avg_temperature,
+                                    mean_irradiance, std_irradiance,
+                                    mean_temperature, std_temperature, seasons):
+    fig, axs = plt.subplots(len(seasons), 1, figsize=(12, 12), sharex=True)
+    cmap = get_cmap("tab10")  # Use a colormap for unique colors
 
-irradiance["season"] = irradiance.index.month.map(assign_season)
-temperature["season"] = temperature.index.month.map(assign_season)
+    for i, season in enumerate(seasons):
+        season_data_irr = avg_irradiance.loc[avg_irradiance.index.get_level_values("season") == season]
+        season_data_temp = avg_temperature.loc[avg_temperature.index.get_level_values("season") == season]
 
+        season_mean_irr = mean_irradiance.loc[season]
+        season_std_irr = std_irradiance.loc[season]
+        season_mean_temp = mean_temperature.loc[season]
+        season_std_temp = std_temperature.loc[season]
 
-# Ensure correct date format for "time" column
-irradiance["time"] = irradiance.index.strftime("%H:%M:%S")  # Use only time formatting
-temperature["time"] = temperature.index.strftime("%H:%M:%S")
+        temp_min = season_mean_temp["t2m"].min() - 7 
+        temp_max = season_mean_temp["t2m"].max() + 7
+        norm_factor = season_mean_irr["GHI"].max()
 
-print(irradiance)
+        ax2 = axs[i].twinx()
 
-seasons = ["winter", "spring", "summer", "autumn"]
-irradiance["season"] = pd.Categorical(irradiance["season"], categories=seasons, ordered=True)
-temperature["season"] = pd.Categorical(temperature["season"], categories=seasons, ordered=True)
+        lines = []
+        labels = []
 
-avg_irradiance = compute_seasonal_time_averages(irradiance)
-avg_temperature = compute_seasonal_time_averages(temperature)
+        # Plot individual years
+        for j, year in enumerate(season_data_irr.index.get_level_values("year").unique()):
+            year_irradiance = season_data_irr.loc[season_data_irr.index.get_level_values("year") == year]
+            year_temperature = season_data_temp.loc[season_data_temp.index.get_level_values("year") == year]
 
-# avg_irradiance.to_csv("irradiance_seasons.csv")
-# avg_temperature.to_csv("temperature_seasons.csv")
+            color = cmap(j % 10)  # Ensure the color index doesn't exceed colormap range
 
-total_year_irradiance_avg = compute_total_year_time_averages(irradiance)
-total_year_temperature_avg = compute_total_year_time_averages(temperature)
-total_year_irradiance_avg.to_csv("processed_data/total_irradiance_4_years.csv")
-total_year_temperature_avg.to_csv("processed_data/total_temperature_4_years.csv")
-print(total_year_irradiance_avg['GHI'])
+            # Convert "time" to datetime for plotting
+            times = pd.to_datetime(year_irradiance.index.get_level_values("time"), format="%H:%M")
 
-# plot_seasonal_profiles(total_year_irradiance_avg, total_year_temperature_avg, seasons)
+            # Plot irradiance for each year
+            line1, = axs[i].plot(
+                times,
+                year_irradiance["GHI"],
+                label=f"GHI ({year})",
+                color=color,
+                linewidth=1,
+                alpha=0.5,
+            )
+            lines.append(line1)
+            labels.append(f"GHI ({year})")
 
-# avg_irradiance = avg_irradiance.groupby(["season"]).mean()
-# avg_temperature = avg_temperature.groupby(["season"]).mean()
-# plot_seasonal_profiles(avg_irradiance, avg_temperature, seasons)
-plot_seasonal_profiles(avg_irradiance, avg_temperature, seasons)
+            # Normalize temperature for plotting
+            normalized_temp = (year_temperature["t2m"] - temp_min) / (temp_max - temp_min) * norm_factor
 
+            # Plot temperature for each year
+            line2, = ax2.plot(
+                times,
+                normalized_temp,
+                label=f"Temperature ({year})",
+                color=color,
+                linewidth=1,
+                linestyle="--",
+                alpha=0.5,
+            )
+            lines.append(line2)
+            labels.append(f"Temperature ({year})")
+
+        # Plot mean irradiance with standard deviation shading
+        times_mean = pd.to_datetime(season_mean_irr.index.get_level_values("time"), format="%H:%M")
+        axs[i].plot(times_mean, season_mean_irr["GHI"], color="black", linewidth=2, label="Mean GHI")
+        axs[i].fill_between(times_mean,
+                            season_mean_irr["GHI"] - season_std_irr["GHI"],
+                            season_mean_irr["GHI"] + season_std_irr["GHI"],
+                            color="blue", alpha=0.2)
+
+        # Plot mean temperature with standard deviation shading
+        normalized_mean_temp = (season_mean_temp["t2m"] - temp_min) / (temp_max - temp_min) * norm_factor
+        temp_std_scaled = season_std_temp["t2m"] / (temp_max - temp_min) * norm_factor
+
+        ax2.plot(times_mean, normalized_mean_temp, color="darkred", linewidth=2, linestyle="--", label="Mean Temperature")
+        ax2.fill_between(times_mean,
+                         normalized_mean_temp - temp_std_scaled,
+                         normalized_mean_temp + temp_std_scaled,
+                         color="red", alpha=0.2)
+
+        # Set y-limits and labels
+        axs[i].set_title(f"{season.capitalize()} Combined Profile")
+        axs[i].set_ylabel("Irradiance (W/m²)")
+        ax2.set_ylabel("Temperature (°C)")
+        ax2.set_ylim(0, norm_factor)
+        temp_ticks = np.linspace(temp_min, temp_max, 5)
+        normalized_ticks = (temp_ticks - temp_min) / (temp_max - temp_min) * norm_factor
+        ax2.set_yticks(normalized_ticks)
+        ax2.set_yticklabels([f"{tick:.1f}" for tick in temp_ticks])
+
+        # Add legends
+        axs[i].legend(loc="upper left", fontsize=8)
+        ax2.legend(loc="upper right", fontsize=8)
+
+    axs[-1].set_xlabel("Time of Day")
+    axs[-1].xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
+    plt.tight_layout()
+    plt.show()
+
+if __name__ == "__main__":
+    irradiance, temperature = get_csv_data(temperature_file, irradiance_file)
+
+    irradiance["season"] = irradiance.index.month.map(assign_season)
+    temperature["season"] = temperature.index.month.map(assign_season)
+
+    # Adjust the time resolution to include only hour and minute
+    irradiance["time"] = irradiance.index.strftime("%H:%M")  # Use only hour and minute
+    temperature["time"] = temperature.index.strftime("%H:%M")
+
+    seasons = ["winter", "spring", "summer", "autumn"]
+    irradiance["season"] = pd.Categorical(irradiance["season"], categories=seasons, ordered=True)
+    temperature["season"] = pd.Categorical(temperature["season"], categories=seasons, ordered=True)
+
+    # Compute seasonal time averages per year
+    avg_irradiance = compute_seasonal_time_averages(irradiance)
+    avg_temperature = compute_seasonal_time_averages(temperature)
+
+    # Compute mean and standard deviation per season and time
+    avg_irradiance_mean, avg_irradiance_std = compute_seasonal_time_stats(irradiance)
+    avg_temperature_mean, avg_temperature_std = compute_seasonal_time_stats(temperature)
+
+    # Plot the combined seasonal profiles
+    plot_combined_seasonal_profiles(avg_irradiance, avg_temperature,
+                                    avg_irradiance_mean, avg_irradiance_std,
+                                    avg_temperature_mean, avg_temperature_std, seasons)
