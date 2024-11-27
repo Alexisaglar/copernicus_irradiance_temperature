@@ -38,6 +38,7 @@ def compute_seasonal_time_stats(df):
     grouped = df.groupby(["season", "time"])
     mean_df = grouped.mean()
     std_df = grouped.std()
+    print(std_df)
     return mean_df, std_df
 
 def compute_seasonal_time_averages(df):

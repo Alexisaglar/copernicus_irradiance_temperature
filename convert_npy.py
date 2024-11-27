@@ -16,7 +16,6 @@ def process_weather_csv(irradiance_file, temperature_file):
     irradiance_df['hour'] = irradiance_df['time'].dt.hour
     irradiance_df = irradiance_df.groupby(['season', 'hour'])['GHI'].mean().unstack()
 
-    print(temperature_df)
     temperature_df['valid_time'] = pd.to_datetime(temperature_df['valid_time'])
     temperature_df['hour'] = temperature_df['valid_time'].dt.hour
     temperature_df = temperature_df.groupby(['season', 'hour'])['t2m'].mean().unstack()
@@ -25,6 +24,7 @@ def process_weather_csv(irradiance_file, temperature_file):
     irradiance_seasons = irradiance_df.to_numpy().T
     temperature_seasons = temperature_df.to_numpy().T
 
+    print(temperature_df)
     np.save('processed_data/irradiance_seasons.npy', irradiance_seasons)
     np.save('processed_data/temperature_seasons.npy', temperature_seasons)
 
